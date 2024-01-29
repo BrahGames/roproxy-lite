@@ -31,12 +31,17 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
     response := makeRequest(ctx, 1)
     defer fasthttp.ReleaseResponse(response)
 
-    // Set the response in ctx
-    ctx.SetBody(response.Body())
+    // Set the response body in ctx
+    body := response.Body()
+
+    // Set the transformed body (or original body if no transformation is needed)
+    ctx.SetBody(body)
+
+    // Set Content-Type to text/plain
+    ctx.Response.Header.SetContentType("text/plain")
+
+    // Set the status code
     ctx.SetStatusCode(response.StatusCode())
-    response.Header.VisitAll(func(key, value []byte) {
-        ctx.Response.Header.Set(string(key), string(value))
-    })
 }
 
 func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {

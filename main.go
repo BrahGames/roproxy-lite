@@ -1,12 +1,12 @@
 package main
 
 import (
-	"net/url"
-	"log"
-	"time"
-	"os"
-	"github.com/valyala/fasthttp"
-	"strconv"
+    "net/url"
+    "log"
+    "time"
+    "os"
+    "github.com/valyala/fasthttp"
+    "strconv"
 )
 
 var timeout, _ = strconv.Atoi(os.Getenv("TIMEOUT"))
@@ -16,19 +16,30 @@ var port = os.Getenv("PORT")
 var client *fasthttp.Client
 
 func main() {
-	h := requestHandler
-	
-	client = &fasthttp.Client{
-		ReadTimeout: time.Duration(timeout) * time.Second,
-		MaxIdleConnDuration: 60 * time.Second,
-	}
+    client = &fasthttp.Client{
+        ReadTimeout: time.Duration(timeout) * time.Second,
+        MaxIdleConnDuration: 60 * time.Second,
+    }
 
-	if err := fasthttp.ListenAndServe(":" + port, h); err != nil {
-		log.Fatalf("Error in ListenAndServe: %s", err)
-	}
+    if err := fasthttp.ListenAndServe(":" + port, requestHandler); err != nil {
+        log.Fatalf("Error in ListenAndServe: %s", err)
+    }
 }
 
 func requestHandler(ctx *fasthttp.RequestCtx) {
+    // Call makeRequest with initial attempt number
+    response := makeRequest(ctx, 1)
+    defer fasthttp.ReleaseResponse(response)
+
+    // Set the response in ctx
+    ctx.SetBody(response.Body())
+    ctx.SetStatusCode(response.StatusCode())
+    response.Header.VisitAll(func(key, value []byte) {
+        ctx.Response.Header.Set(string(key), string(value))
+    })
+}
+
+func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     if attempt > retries {
         resp := fasthttp.AcquireResponse()
         resp.SetBody([]byte("Proxy failed to connect. Please try again."))

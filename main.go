@@ -5,6 +5,7 @@ import (
     "log"
     "time"
     "os"
+    "strings"
     "github.com/valyala/fasthttp"
     "strconv"
 )
@@ -27,23 +28,27 @@ func main() {
 }
 
 func requestHandler(ctx *fasthttp.RequestCtx) {
+    // Call makeRequest with initial attempt number
     response := makeRequest(ctx, 1)
     defer fasthttp.ReleaseResponse(response)
 
-    // Check if response is in JSON format
-    contentType := response.Header.Peek("Content-Type")
-    if !bytes.HasPrefix(contentType, []byte("application/json")) {
-        ctx.SetBody([]byte("Unsupported format. Only JSON responses are supported."))
+    // Check if the response Content-Type is application/json
+    contentType := string(response.Header.Peek("Content-Type"))
+    if !strings.Contains(contentType, "application/json") {
         ctx.SetStatusCode(fasthttp.StatusUnsupportedMediaType)
+        ctx.SetBody([]byte("Unsupported format. Only JSON format is supported."))
         return
     }
 
     // Set the response body in ctx
-    ctx.SetBody(response.Body())
-    ctx.SetStatusCode(response.StatusCode())
+    body := response.Body()
+    ctx.SetBody(body)
 
     // Set Content-Type to application/json
     ctx.Response.Header.SetContentType("application/json")
+
+    // Set the status code
+    ctx.SetStatusCode(response.StatusCode())
 }
 
 func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
@@ -57,15 +62,6 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     req := fasthttp.AcquireRequest()
     defer fasthttp.ReleaseRequest(req)
     req.Header.SetMethod(string(ctx.Method()))
-
-    // Check if request is in JSON format
-    requestContentType := ctx.Request.Header.Peek("Content-Type")
-    if !bytes.HasPrefix(requestContentType, []byte("application/json")) {
-        resp := fasthttp.AcquireResponse()
-        resp.SetBody([]byte("Unsupported format. Only JSON requests are supported."))
-        resp.SetStatusCode(fasthttp.StatusUnsupportedMediaType)
-        return resp
-    }
 
     // Use net/url to parse the original URI
     originalURI := string(ctx.Request.Header.RequestURI())
@@ -99,16 +95,6 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
         fasthttp.ReleaseResponse(resp)
         return makeRequest(ctx, attempt + 1)
     } else {
-        // Check if response is in JSON format
-        responseContentType := resp.Header.Peek("Content-Type")
-        if !bytes.HasPrefix(responseContentType, []byte("application/json")) {
-            fasthttp.ReleaseResponse(resp)
-            resp = fasthttp.AcquireResponse()
-            resp.SetBody([]byte("Unsupported format. Only JSON responses are supported."))
-            resp.SetStatusCode(fasthttp.StatusUnsupportedMediaType)
-            return resp
-        }
-
         return resp
     }
 }

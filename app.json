@@ -1,5 +1,5 @@
 {
-    "name": "RoProxy Lite",
+    "name": "RoProxy Pro",
     "description": "A modified version of RoProxy made for self-hosting.",
     "repository": "https://github.com/halffalse/roproxy-lite",
     "env": {

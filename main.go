@@ -67,31 +67,9 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     defer fasthttp.ReleaseRequest(req)
     req.Header.SetMethod(string(ctx.Method()))
 
-    // Improved URL reconstruction
+    // Directly use the original URI without any alteration
     originalURI := string(ctx.Request.Header.RequestURI())
-    splitIndex := strings.Index(originalURI, "?")
-    var basePath, queryString string
-    if splitIndex == -1 {
-        // No query string present
-        basePath = originalURI
-    } else {
-        // Extract basePath and queryString
-        basePath = originalURI[:splitIndex]
-        queryString = originalURI[splitIndex:]
-    }
-
-    // Extracting the base domain and the remaining path
-    pathParts := strings.SplitN(basePath[1:], "/", 2)
-    if len(pathParts) < 2 {
-        resp := fasthttp.AcquireResponse()
-        resp.SetBody([]byte("Invalid URL format."))
-        resp.SetStatusCode(400)
-        return resp
-    }
-
-    baseDomain := pathParts[0]
-    remainingPath := pathParts[1]
-    targetURL := "https://" + baseDomain + ".roblox.com/" + remainingPath + queryString
+    targetURL := "https://roblox.com" + originalURI
     req.SetRequestURI(targetURL)
 
     // Copy request headers and body

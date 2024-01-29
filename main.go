@@ -28,33 +28,6 @@ func main() {
 	}
 }
 
-func requestHandler(ctx *fasthttp.RequestCtx) {
-	val, ok := os.LookupEnv("KEY")
-
-	if ok && string(ctx.Request.Header.Peek("PROXYKEY")) != val {
-		ctx.SetStatusCode(407)
-		ctx.SetBody([]byte("Missing or invalid PROXYKEY header."))
-		return
-	}
-
-	if len(strings.SplitN(string(ctx.Request.Header.RequestURI())[1:], "/", 2)) < 2 {
-		ctx.SetStatusCode(400)
-		ctx.SetBody([]byte("URL format invalid."))
-		return
-	}
-
-	response := makeRequest(ctx, 1)
-
-	defer fasthttp.ReleaseResponse(response)
-
-	body := response.Body()
-	ctx.SetBody(body)
-	ctx.SetStatusCode(response.StatusCode())
-	response.Header.VisitAll(func (key, value []byte) {
-		ctx.Response.Header.Set(string(key), string(value))
-	})
-}
-
 func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     if attempt > retries {
         resp := fasthttp.AcquireResponse()
@@ -67,9 +40,18 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     defer fasthttp.ReleaseRequest(req)
     req.Header.SetMethod(string(ctx.Method()))
 
-    // Directly use the original URI without any alteration
+    // Extract the path and query from the original URI
     originalURI := string(ctx.Request.Header.RequestURI())
-    targetURL := "https://roblox.com" + originalURI
+    pathAndQuery := strings.SplitN(originalURI, "?", 2)
+    var path, query string
+    path = pathAndQuery[0]
+
+    if len(pathAndQuery) > 1 {
+        query = "?" + pathAndQuery[1]
+    }
+
+    // Construct the target URL with both path and query
+    targetURL := "https://www.roblox.com" + path + query
     req.SetRequestURI(targetURL)
 
     // Copy request headers and body

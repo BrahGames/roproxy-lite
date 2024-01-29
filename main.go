@@ -1,8 +1,3 @@
-why does this link say it is not found, when it is suppose to be found and the path is valid. It has to do with the main logic in the go code. It has to do with the URL parsing. Please fix the code for me.
-
-https://roproxy-rbx-b06be4a9cbcb.herokuapp.com/users/favorites/list-json?assetTypeId=9&userId=3636151326&itemsPerPage=1000000&pageNumber=1
-
-go code:
 package main
 
 import (

@@ -34,6 +34,10 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
     // Set the response in ctx
     ctx.SetBody(response.Body())
     ctx.SetStatusCode(response.StatusCode())
+
+    // Set Content-Type to text/plain
+    ctx.Response.Header.SetContentType("text/plain")
+
     response.Header.VisitAll(func(key, value []byte) {
         ctx.Response.Header.Set(string(key), string(value))
     })

@@ -7,7 +7,6 @@ import (
 	"os"
 	"github.com/valyala/fasthttp"
 	"strconv"
-	"strings"
 )
 
 var timeout, _ = strconv.Atoi(os.Getenv("TIMEOUT"))
@@ -29,7 +28,7 @@ func main() {
 	}
 }
 
-func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
+func requestHandler(ctx *fasthttp.RequestCtx) {
     if attempt > retries {
         resp := fasthttp.AcquireResponse()
         resp.SetBody([]byte("Proxy failed to connect. Please try again."))

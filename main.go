@@ -17,13 +17,13 @@ var client *fasthttp.Client
 
 func main() {
 	h := requestHandler
-	
+
 	client = &fasthttp.Client{
-		ReadTimeout: time.Duration(timeout) * time.Second,
+		ReadTimeout:        time.Duration(timeout) * time.Second,
 		MaxIdleConnDuration: 60 * time.Second,
 	}
 
-	if err := fasthttp.ListenAndServe(":" + port, h); err != nil {
+	if err := fasthttp.ListenAndServe(":"+port, h); err != nil {
 		log.Fatalf("Error in ListenAndServe: %s", err)
 	}
 }
@@ -37,36 +37,32 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if len(strings.SplitN(string(ctx.Request.Header.RequestURI())[1:], "/", 2)) < 2 {
-		ctx.SetStatusCode(400)
-		ctx.SetBody([]byte("URL format invalid."))
-		return
-	}
+	// Construct the URL to proxy to (use the original URL)
+	originalURL := "https://roblox.com" + ctx.URI().String()
 
-	response := makeRequest(ctx, 1)
-
-	defer fasthttp.ReleaseResponse(response)
+	response := makeRequest(ctx, originalURL, 1)
 
 	body := response.Body()
 	ctx.SetBody(body)
 	ctx.SetStatusCode(response.StatusCode())
-	response.Header.VisitAll(func (key, value []byte) {
+	response.Header.VisitAll(func(key, value []byte) {
 		ctx.Response.Header.Set(string(key), string(value))
 	})
 }
-func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
+
+func makeRequest(ctx *fasthttp.RequestCtx, url string, attempt int) *fasthttp.Response {
 	if attempt > retries {
 		resp := fasthttp.AcquireResponse()
 		resp.SetBody([]byte("Proxy failed to connect. Please try again."))
 		resp.SetStatusCode(500)
+
 		return resp
 	}
 
-	// Modify the code here to forward the request to the original URL
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	req.Header.SetMethod(string(ctx.Method()))
-	req.SetRequestURI("https://roblox.com" + ctx.Request.URI().String()) // Use the original URL
+	req.SetRequestURI(url) // Use the original URL
 	req.SetBody(ctx.Request.Body())
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
 		req.Header.Set(string(key), string(value))
@@ -79,7 +75,7 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
 
 	if err != nil {
 		fasthttp.ReleaseResponse(resp)
-		return makeRequest(ctx, attempt+1)
+		return makeRequest(ctx, url, attempt+1)
 	} else {
 		return resp
 	}

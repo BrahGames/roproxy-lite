@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/url"
 	"log"
 	"time"
 	"os"
@@ -40,18 +41,21 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     defer fasthttp.ReleaseRequest(req)
     req.Header.SetMethod(string(ctx.Method()))
 
-    // Extract the path and query from the original URI
+    // Use net/url to parse the original URI
     originalURI := string(ctx.Request.Header.RequestURI())
-    pathAndQuery := strings.SplitN(originalURI, "?", 2)
-    var path, query string
-    path = pathAndQuery[0]
-
-    if len(pathAndQuery) > 1 {
-        query = "?" + pathAndQuery[1]
+    parsedURI, err := url.ParseRequestURI(originalURI)
+    if err != nil {
+        resp := fasthttp.AcquireResponse()
+        resp.SetBody([]byte("Invalid URL format."))
+        resp.SetStatusCode(400)
+        return resp
     }
 
-    // Construct the target URL with both path and query
-    targetURL := "https://www.roblox.com" + path + query
+    // Reconstruct the URL
+    targetURL := "https://www.roblox.com" + parsedURI.Path
+    if parsedURI.RawQuery != "" {
+        targetURL += "?" + parsedURI.RawQuery
+    }
     req.SetRequestURI(targetURL)
 
     // Copy request headers and body
@@ -64,7 +68,7 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
 
     // Make the request
     resp := fasthttp.AcquireResponse()
-    err := client.Do(req, resp)
+    err = client.Do(req, resp)
     if err != nil {
         fasthttp.ReleaseResponse(resp)
         return makeRequest(ctx, attempt + 1)

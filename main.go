@@ -1,102 +1,84 @@
 package main
 
 import (
-    "net/url"
     "log"
-    "time"
+    "net/url"
     "os"
-    "strings"
-    "github.com/valyala/fasthttp"
     "strconv"
+    "strings"
+    "time"
+    "github.com/valyala/fasthttp"
 )
 
-var timeout, _ = strconv.Atoi(os.Getenv("TIMEOUT"))
-var retries, _ = strconv.Atoi(os.Getenv("RETRIES"))
-var port = os.Getenv("PORT")
-
-var client *fasthttp.Client
-
-func main() {
-    client = &fasthttp.Client{
-        ReadTimeout: time.Duration(timeout) * time.Second,
+var (
+    timeout, _ = strconv.Atoi(os.Getenv("TIMEOUT"))
+    retries, _ = strconv.Atoi(os.Getenv("RETRIES"))
+    port       = os.Getenv("PORT")
+    client     = &fasthttp.Client{
+        ReadTimeout:         time.Duration(timeout) * time.Second,
         MaxIdleConnDuration: 60 * time.Second,
     }
+)
 
-    if err := fasthttp.ListenAndServe(":" + port, requestHandler); err != nil {
+func main() {
+    if err := fasthttp.ListenAndServe(":"+port, requestHandler); err != nil {
         log.Fatalf("Error in ListenAndServe: %s", err)
     }
 }
 
 func requestHandler(ctx *fasthttp.RequestCtx) {
-    // Call makeRequest with initial attempt number
     response := makeRequest(ctx, 1)
     defer fasthttp.ReleaseResponse(response)
 
-    // Check if the response Content-Type is application/json
-    contentType := string(response.Header.Peek("Content-Type"))
-    if !strings.Contains(contentType, "application/json") {
-        ctx.SetStatusCode(fasthttp.StatusUnsupportedMediaType)
-        ctx.SetBody([]byte("Unsupported format. Only JSON format is supported."))
-        return
-    }
-
-    // Set the response body in ctx
-    body := response.Body()
-    ctx.SetBody(body)
-
-    // Set Content-Type to application/json
-    ctx.Response.Header.SetContentType("application/json")
-
-    // Set the status code
-    ctx.SetStatusCode(response.StatusCode())
+    // Forwarding the response
+    ctx.Response.SetStatusCode(response.StatusCode())
+    ctx.Response.SetBody(response.Body())
+    ctx.Response.Header.SetContentType(string(response.Header.Peek("Content-Type")))
 }
 
 func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     if attempt > retries {
-        log.Printf("Exceeded maximum retry attempts")
         resp := fasthttp.AcquireResponse()
         resp.SetBody([]byte("Proxy failed to connect. Please try again."))
-        resp.SetStatusCode(500)
+        resp.SetStatusCode(fasthttp.StatusInternalServerError)
         return resp
     }
 
     req := fasthttp.AcquireRequest()
     defer fasthttp.ReleaseRequest(req)
-    req.Header.SetMethod(string(ctx.Method()))
+    
+    // Setting the method and headers for the new request
+    req.Header.SetMethodBytes(ctx.Method())
 
-    originalURI := string(ctx.Request.Header.RequestURI())
-    log.Printf("Original URI: %s", originalURI)
-
-    parsedURI, err := url.ParseRequestURI(originalURI)
-    if err != nil {
-        log.Printf("Error parsing request URI: %s", err)
+    originalURI := string(ctx.Request.URI().FullURI())
+    if !strings.HasPrefix(originalURI, "/proxy/") {
+        log.Printf("Invalid request path: %s", originalURI)
         resp := fasthttp.AcquireResponse()
-        resp.SetBody([]byte("Invalid URL format."))
-        resp.SetStatusCode(400)
+        resp.SetBody([]byte("Invalid request path."))
+        resp.SetStatusCode(fasthttp.StatusBadRequest)
         return resp
     }
 
-    targetURL := "https://" + strings.TrimPrefix(parsedURI.Path, "/proxy/")
-    if parsedURI.RawQuery != "" {
-        targetURL += "?" + parsedURI.RawQuery
-    }
-
-    log.Printf("Forwarding request to: %s", targetURL)
+    // Construct the target URL by removing the '/proxy/' prefix
+    targetURL := "https://" + strings.TrimPrefix(originalURI, "/proxy/")
     req.SetRequestURI(targetURL)
 
-    req.SetBody(ctx.Request.Body())
     ctx.Request.Header.VisitAll(func(key, value []byte) {
-        if string(key) != "Host" {
-            req.Header.Set(string(key), string(value))
+        if string(key) != "Host" && string(key) != "User-Agent" {
+            req.Header.SetBytesKV(key, value)
         }
     })
 
+    // Setting a custom User-Agent for the proxy
+    req.Header.Set("User-Agent", "CustomProxy")
+
+    // Making the request to the target URL
     resp := fasthttp.AcquireResponse()
-    err = client.Do(req, resp)
+    err := client.Do(req, resp)
     if err != nil {
-        log.Printf("Error making forwarded request: %s", err)
+        log.Printf("Error making request to %s: %s", targetURL, err)
         fasthttp.ReleaseResponse(resp)
-        return makeRequest(ctx, attempt + 1)
+        return makeRequest(ctx, attempt+1)
     }
 
     return resp

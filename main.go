@@ -53,6 +53,7 @@ func requestHandler(ctx *fasthttp.RequestCtx) {
 
 func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     if attempt > retries {
+        log.Printf("Exceeded maximum retry attempts")
         resp := fasthttp.AcquireResponse()
         resp.SetBody([]byte("Proxy failed to connect. Please try again."))
         resp.SetStatusCode(500)
@@ -63,38 +64,40 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
     defer fasthttp.ReleaseRequest(req)
     req.Header.SetMethod(string(ctx.Method()))
 
-    // Use net/url to parse the original URI
     originalURI := string(ctx.Request.Header.RequestURI())
+    log.Printf("Original URI: %s", originalURI)
+
     parsedURI, err := url.ParseRequestURI(originalURI)
     if err != nil {
+        log.Printf("Error parsing request URI: %s", err)
         resp := fasthttp.AcquireResponse()
         resp.SetBody([]byte("Invalid URL format."))
         resp.SetStatusCode(400)
         return resp
     }
 
-    // Construct the target URL dynamically based on the incoming request
     targetURL := "https://" + strings.TrimPrefix(parsedURI.Path, "/proxy/")
     if parsedURI.RawQuery != "" {
         targetURL += "?" + parsedURI.RawQuery
     }
+
+    log.Printf("Forwarding request to: %s", targetURL)
     req.SetRequestURI(targetURL)
 
-    // Copy request headers and body
     req.SetBody(ctx.Request.Body())
     ctx.Request.Header.VisitAll(func(key, value []byte) {
-        req.Header.Set(string(key), string(value))
+        if string(key) != "Host" {
+            req.Header.Set(string(key), string(value))
+        }
     })
-    req.Header.Set("User-Agent", "RoProxy")
-    req.Header.Del("Host") // Remove the Host header to prevent issues with the forwarded request
 
-    // Make the request
     resp := fasthttp.AcquireResponse()
     err = client.Do(req, resp)
     if err != nil {
+        log.Printf("Error making forwarded request: %s", err)
         fasthttp.ReleaseResponse(resp)
         return makeRequest(ctx, attempt + 1)
-    } else {
-        return resp
     }
+
+    return resp
 }

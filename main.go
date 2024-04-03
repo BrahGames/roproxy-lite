@@ -73,20 +73,8 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
         return resp
     }
 
-    // Dynamic target URL construction based on the incoming request
-    // Assuming your proxy endpoint looks like /proxy/{dynamicPath}
-    // and the {dynamicPath} part is used to construct the actual request to the target.
-    // You need to extract this dynamic part and construct the target URL accordingly.
-    pathSegments := strings.Split(parsedURI.Path, "/")
-    if len(pathSegments) < 3 {
-        resp := fasthttp.AcquireResponse()
-        resp.SetBody([]byte("Invalid proxy path."))
-        resp.SetStatusCode(400)
-        return resp
-    }
-
-    // Construct the target URL using the dynamic part from the path
-    targetURL := "https://" + pathSegments[2] + strings.Join(pathSegments[3:], "/")
+    // Construct the target URL dynamically based on the incoming request
+    targetURL := "https://" + strings.TrimPrefix(parsedURI.Path, "/proxy/")
     if parsedURI.RawQuery != "" {
         targetURL += "?" + parsedURI.RawQuery
     }
@@ -98,7 +86,7 @@ func makeRequest(ctx *fasthttp.RequestCtx, attempt int) *fasthttp.Response {
         req.Header.Set(string(key), string(value))
     })
     req.Header.Set("User-Agent", "RoProxy")
-    req.Header.Del("Roblox-Id")
+    req.Header.Del("Host") // Remove the Host header to prevent issues with the forwarded request
 
     // Make the request
     resp := fasthttp.AcquireResponse()
